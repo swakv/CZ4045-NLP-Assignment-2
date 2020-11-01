@@ -8,19 +8,20 @@ class RNNModel(nn.Module):
 
     def __init__(self, rnn_type, ntoken, ninp, nhid, nlayers, dropout=0.5, tie_weights=False):
         super(RNNModel, self).__init__()
-        self.ntoken = ntoken # OUTPUT SIZE 
+        self.ntoken = ntoken # VOCAB SIZE
         self.drop = nn.Dropout(dropout)
         self.encoder = nn.Embedding(ntoken, ninp)
         if rnn_type in ['LSTM', 'GRU']:
             self.rnn = getattr(nn, rnn_type)(ninp, nhid, nlayers, dropout=dropout)
+            # print(rnn_type)
         else:
             try:
                 nonlinearity = {'RNN_TANH': 'tanh', 'RNN_RELU': 'relu'}[rnn_type]
             except KeyError:
                 raise ValueError( """An invalid option for `--model` was supplied,
                                  options are ['LSTM', 'GRU', 'RNN_TANH' or 'RNN_RELU']""")
-            self.rnn = nn.RNN(ninp, nhid, nlayers, nonlinearity=nonlinearity, dropout=dropout) # input size, hidden dimension, output size
-        self.decoder = nn.Linear(nhid, ntoken) # hidden dimension, output size
+            self.rnn = nn.RNN(ninp, nhid, nlayers, nonlinearity=nonlinearity, dropout=dropout) # input size, hidden dimension, no of hidden layers size
+        self.decoder = nn.Linear(nhid, ntoken) # hidden dimension, vocab size
 
         # Optionally tie weights as in:
         # "Using the Output Embedding to Improve Language Models" (Press & Wolf 2016)
@@ -150,3 +151,31 @@ class TransformerModel(nn.Module):
         output = self.transformer_encoder(src, self.src_mask)
         output = self.decoder(output)
         return F.log_softmax(output, dim=-1)
+
+
+
+class FNNModel(nn.Module):
+
+    def __init__(self, ntoken, ninp, nhid):
+        super(FNNModel, self).__init__()
+
+        self.embeddings = nn.Embedding(ntoken, ninp)
+        self.linear = nn.Linear(ninp, nhid)
+        self.linear2 = nn.Linear(nhid, ntoken) 
+
+        self.ntoken = ntoken 
+        self.init_weights()
+        self.nhid = nhid
+
+    def init_weights(self):
+        initrange = 0.1
+        nn.init.uniform_(self.embeddings.weight, -initrange, initrange)
+        nn.init.zeros_(self.linear2.weight)
+        nn.init.uniform_(self.linear2.weight, -initrange, initrange)
+
+    def forward(self, input):
+        embeds = self.embeddings(input)
+        out = F.tanh(self.linear(embeds))
+        out = self.linear2(out)
+        log_probs = F.log_softmax(out, dim=1)
+        return log_probs
