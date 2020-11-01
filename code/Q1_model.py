@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+embed_matrix = []
+
 class RNNModel(nn.Module):
     """Container module with an encoder, a recurrent module, and a decoder."""
 
@@ -175,6 +177,7 @@ class FNNModel(nn.Module):
 
     def forward(self, input):
         embeds = self.embeddings(input)
+        embed_matrix.extend(embeds)
         out = F.tanh(self.linear(embeds))
         out = self.linear2(out)
         log_probs = F.log_softmax(out, dim=1)

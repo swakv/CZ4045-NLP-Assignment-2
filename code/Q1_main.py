@@ -29,7 +29,7 @@ parser.add_argument('--epochs', type=int, default=40,
                     help='upper epoch limit')
 parser.add_argument('--batch_size', type=int, default=20, metavar='N',
                     help='batch size')
-parser.add_argument('--bptt', type=int, default=35,
+parser.add_argument('--bptt', type=int, default=8,
                     help='sequence length')
 parser.add_argument('--dropout', type=float, default=0.2,
                     help='dropout applied to layers (0 = no dropout)')
@@ -103,7 +103,7 @@ if args.model == 'Transformer':
     model = Q1_model.TransformerModel(ntokens, args.emsize, args.nhead, args.nhid, args.nlayers, args.dropout).to(device)
 elif  args.model == 'FNN':
     model = Q1_model.FNNModel(ntokens, args.emsize, args.nhid)
-    optimizer = torch.optim.SGD(model.parameters(), lr = 20)
+    optimizer = torch.optim.Adam(model.parameters(), lr = args.lr)
 else:
     model = Q1_model.RNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, args.dropout, args.tied).to(device)
 
@@ -183,6 +183,7 @@ def train():
         loss.backward()
         optimizer.step()
 
+
         # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
         # if args.model != 'Transformer' and args.model != 'FNN':
         torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip)
@@ -194,7 +195,7 @@ def train():
         if batch % args.log_interval == 0 and batch > 0:
             cur_loss = total_loss / args.log_interval
             elapsed = time.time() - start_time
-            print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f} | ms/batch {:5.2f} | '
+            print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.3f} | ms/batch {:5.2f} | '
                     'loss {:5.2f} | ppl {:8.2f}'.format(
                 epoch, batch, len(train_data) // args.bptt, lr,
                 elapsed * 1000 / args.log_interval, cur_loss, math.exp(cur_loss)))
@@ -202,6 +203,10 @@ def train():
             start_time = time.time()
         if args.dry_run:
             break
+    
+    print("Embedding Matrix : ", Q1_model.embed_matrix)
+    s = model.linear2.weight
+    print("Final Layer Weights : ", torch.sum(s))
 
 
 def export_onnx(path, batch_size, seq_len):
