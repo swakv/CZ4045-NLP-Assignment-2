@@ -133,8 +133,11 @@ def repackage_hidden(h):
 # to the seq_len dimension in the LSTM.
 
 def get_batch(source, i):
+    # print("i " ,i)
     seq_len = min(args.bptt, len(source) - 1 - i)
+    # print("SEQLEN",seq_len)
     data = source[i:i+seq_len]
+    # print("DATA SHAPE ",data.shape)
     target = source[i+1:i+1+seq_len].view(-1)
     return data, target
 
@@ -167,6 +170,7 @@ def train():
     ntokens = len(corpus.dictionary)
     if args.model != 'Transformer' and args.model != 'FNN':
         hidden = model.init_hidden(args.batch_size)
+    # print("TRAIN SHAPE ",train_data.shape)
     for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
         data, targets = get_batch(train_data, i)
         # Starting each batch, we detach the hidden state from how it was previously produced.

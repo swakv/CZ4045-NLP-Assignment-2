@@ -163,6 +163,7 @@ class FNNModel(nn.Module):
 
         self.embeddings = nn.Embedding(ntoken, ninp)
         self.linear = nn.Linear(ninp, nhid)
+        self.linear.weight.data = self.embeddings.weight.data.transpose(0,1)
         self.linear2 = nn.Linear(nhid, ntoken) 
 
         self.ntoken = ntoken 
@@ -182,3 +183,4 @@ class FNNModel(nn.Module):
         out = self.linear2(out)
         log_probs = F.log_softmax(out, dim=1)
         return log_probs
+
