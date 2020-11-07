@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-embed_matrix = []
+
 
 class RNNModel(nn.Module):
     """Container module with an encoder, a recurrent module, and a decoder."""
@@ -162,8 +162,9 @@ class FNNModel(nn.Module):
         super(FNNModel, self).__init__()
 
         self.embeddings = nn.Embedding(ntoken, ninp)
+        
         self.linear = nn.Linear(ninp, nhid)
-        self.linear.weight.data = self.embeddings.weight.data.transpose(0,1)
+        # self.linear.weight.data = self.embeddings.weight.data.transpose(0,1)
         self.linear2 = nn.Linear(nhid, ntoken) 
 
         self.ntoken = ntoken 
@@ -178,9 +179,80 @@ class FNNModel(nn.Module):
 
     def forward(self, input):
         embeds = self.embeddings(input)
-        embed_matrix.extend(embeds)
         out = F.tanh(self.linear(embeds))
         out = self.linear2(out)
         log_probs = F.log_softmax(out, dim=1)
         return log_probs
 
+
+# class FNNModelSharing(nn.Module):
+
+#     def __init__(self, ntoken, ninp, nhid):
+#         super(FNNModelSharing, self).__init__()
+
+#         self.embeddings = nn.Embedding(ntoken, ninp)
+#         self.linear = nn.Linear(ninp, nhid)
+#         self.linear2 = nn.Linear(nhid, ntoken) 
+
+#         self.ntoken = ntoken 
+#         self.init_weights()
+#         self.nhid = nhid
+
+#         self.linear2_base_weights = nn.Parameter(torch.randn(nhid, ntoken))
+#         self.shared_weights = nn.Parameter(torch.randn(nhid, ninp))
+        
+
+#     def init_weights(self):
+#         initrange = 0.1
+#         nn.init.uniform_(self.embeddings.weight, -initrange, initrange)
+#         nn.init.zeros_(self.linear2.weight)
+#         nn.init.uniform_(self.linear2.weight, -initrange, initrange)
+
+#     def forward(self, input):
+#         embeds = self.embeddings(input)
+#         print("EMBED MATRIX SHAPE ",embeds.shape)
+#         embeds = embeds.reshape([160,200])
+#         print("EMBED MATRIX SHAPE AFTER ",embeds.shape)
+
+#         self.linear.weight = self.shared_weights
+#         print("LINEAR SHAPE : ", self.linear.weight.shape)
+
+#         self.linear2.weight = self.linear2_base_weights
+#         print("LINEAR2 WEIGHT SHAPE", self.linear2.weight.shape)
+#         out = F.tanh(self.linear(embeds))
+#         print("OUT BEFORE SHAPE", out.shape)
+#         out = self.linear2(out)
+#         print(out.shape)
+
+#         log_probs = F.log_softmax(out, dim=1)
+#         return log_probs
+
+class FNNModelSharing(nn.Module):
+
+    def __init__(self, ntoken, ninp, nhid):
+        super(FNNModelSharing, self).__init__()
+
+        self.embeddings = nn.Embedding(ntoken, ninp)
+        
+        self.linear = nn.Linear(ninp, nhid)
+        self.linear2 = nn.Linear(nhid, ntoken) 
+        
+        self.linear2.weight.data = self.embeddings.weight.data
+
+        self.ntoken = ntoken 
+        self.init_weights()
+        self.nhid = nhid
+
+    def init_weights(self):
+        initrange = 0.1
+        nn.init.uniform_(self.embeddings.weight, -initrange, initrange)
+        nn.init.zeros_(self.linear2.weight)
+        nn.init.uniform_(self.linear2.weight, -initrange, initrange)
+
+    def forward(self, input):
+        embeds = self.embeddings(input)
+        out = F.tanh(self.linear(embeds))
+        
+        out = self.linear2(out)
+        log_probs = F.log_softmax(out, dim=1)
+        return log_probs

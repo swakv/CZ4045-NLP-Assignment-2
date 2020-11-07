@@ -14,7 +14,7 @@ parser = argparse.ArgumentParser(description='PyTorch Wikitext-2 RNN/LSTM/GRU/Tr
 parser.add_argument('--data', type=str, default='wikitext-2',
                     help='location of the data corpus')
 parser.add_argument('--model', type=str, default='FNN',
-                    help='type of recurrent net (RNN_TANH, RNN_RELU, LSTM, GRU, Transformer, FNN)')
+                    help='type of recurrent net (RNN_TANH, RNN_RELU, LSTM, GRU, Transformer, FNN, FNNS)')
 parser.add_argument('--emsize', type=int, default=200,
                     help='size of word embeddings')
 parser.add_argument('--nhid', type=int, default=200,
@@ -104,6 +104,9 @@ if args.model == 'Transformer':
 elif  args.model == 'FNN':
     model = Q1_model.FNNModel(ntokens, args.emsize, args.nhid)
     optimizer = torch.optim.Adam(model.parameters(), lr = args.lr)
+elif args.model == 'FNNS':
+    model = Q1_model.FNNModelSharing(ntokens, args.emsize, args.nhid)
+    optimizer = torch.optim.Adam(model.parameters(), lr = args.lr)
 else:
     model = Q1_model.RNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, args.dropout, args.tied).to(device)
 
@@ -147,12 +150,12 @@ def evaluate(data_source):
     model.eval()
     total_loss = 0.
     ntokens = len(corpus.dictionary)
-    if args.model != 'Transformer' and args.model != 'FNN':
+    if args.model != 'Transformer' and args.model != 'FNN' and args.model != 'FNNS':
         hidden = model.init_hidden(eval_batch_size)
     with torch.no_grad():
         for i in range(0, data_source.size(0) - 1, args.bptt):
             data, targets = get_batch(data_source, i)
-            if args.model == 'Transformer' or args.model == 'FNN':
+            if args.model == 'Transformer' or args.model == 'FNN' or args.model == 'FNNS':
                 output = model(data)
                 output = output.view(-1, ntokens)
             else:
@@ -168,7 +171,7 @@ def train():
     total_loss = 0.
     start_time = time.time()
     ntokens = len(corpus.dictionary)
-    if args.model != 'Transformer' and args.model != 'FNN':
+    if args.model != 'Transformer' and args.model != 'FNN' and args.model != 'FNNS':
         hidden = model.init_hidden(args.batch_size)
     # print("TRAIN SHAPE ",train_data.shape)
     for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
@@ -176,7 +179,7 @@ def train():
         # Starting each batch, we detach the hidden state from how it was previously produced.
         # If we didn't, the model would try backpropagating all the way to start of the dataset.
         model.zero_grad()
-        if args.model == 'Transformer' or args.model == 'FNN':
+        if args.model == 'Transformer' or args.model == 'FNN' or args.model == 'FNNS':
             optimizer.zero_grad()
             output = model(data)
             output = output.view(-1, ntokens)
@@ -208,9 +211,6 @@ def train():
         if args.dry_run:
             break
     
-    print("Embedding Matrix : ", Q1_model.embed_matrix)
-    s = model.linear2.weight
-    print("Final Layer Weights : ", torch.sum(s))
 
 
 def export_onnx(path, batch_size, seq_len):
