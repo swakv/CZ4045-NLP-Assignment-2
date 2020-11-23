@@ -20,7 +20,7 @@ class Dictionary(object):
 class Corpus(object):
     def __init__(self, path):
         self.dictionary = Dictionary()
-        self.train = self.tokenize('../wikitext-2/wiki.test.tokens')
+        self.train = self.tokenize('../wikitext-2/wiki.train.tokens')
         self.valid = self.tokenize('../wikitext-2/wiki.valid.tokens')
         self.test = self.tokenize( '../wikitext-2/wiki.test.tokens')
 

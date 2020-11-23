@@ -6,14 +6,14 @@ import os
 import torch
 import torch.nn as nn
 import torch.onnx
-
+import numpy as np
 import Q1_data
 import Q1_model
 
 parser = argparse.ArgumentParser(description='PyTorch Wikitext-2 RNN/LSTM/GRU/Transformer Language Model')
 parser.add_argument('--data', type=str, default='wikitext-2',
                     help='location of the data corpus')
-parser.add_argument('--model', type=str, default='FNN',
+parser.add_argument('--model', type=str, default='LSTM',
                     help='type of recurrent net (RNN_TANH, RNN_RELU, LSTM, GRU, Transformer, FNN, FNNS)')
 parser.add_argument('--emsize', type=int, default=200,
                     help='size of word embeddings')
@@ -29,7 +29,7 @@ parser.add_argument('--epochs', type=int, default=40,
                     help='upper epoch limit')
 parser.add_argument('--batch_size', type=int, default=20, metavar='N',
                     help='batch size')
-parser.add_argument('--bptt', type=int, default=8,
+parser.add_argument('--bptt', type=int, default=35,
                     help='sequence length')
 parser.add_argument('--dropout', type=float, default=0.2,
                     help='dropout applied to layers (0 = no dropout)')
@@ -39,7 +39,7 @@ parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
-parser.add_argument('--log-interval', type=int, default=200, metavar='N',
+parser.add_argument('--log-interval', type=int, default=5000, metavar='N',
                     help='report interval')
 parser.add_argument('--save', type=str, default='model.pt',
                     help='path to save the final model')
@@ -80,6 +80,15 @@ corpus = Q1_data.Corpus(args.data)
 # dependence of e. g. 'g' on 'f' can not be learned, but allows more efficient
 # batch processing.
 
+
+def ngram(data, no):
+    # ngrams_arr = [((data[i: i+no-1]) for i in range(len(data)) - no-1 )]
+    ngrams_tup = torch.split(data,8)
+
+    # print("--------------", len(ngrams_arr))
+    return ngrams_tup
+
+
 def batchify(data, bsz):
     # Work out how cleanly we can divide the dataset into bsz parts.
     nbatch = data.size(0) // bsz
@@ -89,10 +98,16 @@ def batchify(data, bsz):
     data = data.view(bsz, -1).t().contiguous()
     return data.to(device)
 
+
 eval_batch_size = 10
-train_data = batchify(corpus.train, args.batch_size)
-val_data = batchify(corpus.valid, eval_batch_size)
-test_data = batchify(corpus.test, eval_batch_size)
+if args.model != 'FNN' and args.model != 'FNNS':
+    train_data = batchify(corpus.train, args.batch_size)
+    val_data = batchify(corpus.valid, eval_batch_size)
+    test_data = batchify(corpus.test, eval_batch_size)
+else: 
+    train_data = ngram(corpus.train, 8)
+    val_data = ngram(corpus.valid, 8)
+    test_data = ngram(corpus.test, 8)
 
 ###############################################################################
 # Build the model
@@ -152,16 +167,31 @@ def evaluate(data_source):
     ntokens = len(corpus.dictionary)
     if args.model != 'Transformer' and args.model != 'FNN' and args.model != 'FNNS':
         hidden = model.init_hidden(eval_batch_size)
+    
     with torch.no_grad():
-        for i in range(0, data_source.size(0) - 1, args.bptt):
-            data, targets = get_batch(data_source, i)
-            if args.model == 'Transformer' or args.model == 'FNN' or args.model == 'FNNS':
+        if args.model != 'FNN' and args.model != 'FNNS':
+            for i in range(0, data_source.size(0) - 1, args.bptt):
+                data, targets = get_batch(data_source, i)
+                if args.model == 'Transformer' or args.model == 'FNN' or args.model == 'FNNS':
+                    output = model(data)
+                    output = output.view(-1, ntokens)
+                else:
+                    output, hidden = model(data, hidden)
+                    hidden = repackage_hidden(hidden)
+                total_loss += len(data) * criterion(output, targets).item()
+        else:
+            for i in range(len(data_source)):
+                data = np.asarray(data_source[i])
+                data = torch.LongTensor(list(data))
+                targets = np.asarray(data_source[i][1:])
+                target_n = np.asarray(data_source[i+1][0])
+                targets = np.append(targets, target_n)
+                targets = torch.LongTensor(list(targets))
+
                 output = model(data)
                 output = output.view(-1, ntokens)
-            else:
-                output, hidden = model(data, hidden)
-                hidden = repackage_hidden(hidden)
-            total_loss += len(data) * criterion(output, targets).item()
+                total_loss += len(data) * criterion(output, targets).item()
+
     return total_loss / (len(data_source) - 1)
 
 
@@ -173,44 +203,86 @@ def train():
     ntokens = len(corpus.dictionary)
     if args.model != 'Transformer' and args.model != 'FNN' and args.model != 'FNNS':
         hidden = model.init_hidden(args.batch_size)
-    # print("TRAIN SHAPE ",train_data.shape)
-    for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
-        data, targets = get_batch(train_data, i)
-        # Starting each batch, we detach the hidden state from how it was previously produced.
-        # If we didn't, the model would try backpropagating all the way to start of the dataset.
-        model.zero_grad()
-        if args.model == 'Transformer' or args.model == 'FNN' or args.model == 'FNNS':
+
+    if args.model != 'FNN' and args.model != 'FNNS':
+        for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
+
+            data, targets = get_batch(train_data, i)
+
+            # Starting each batch, we detach the hidden state from how it was previously produced.
+            # If we didn't, the model would try backpropagating all the way to start of the dataset.
+            model.zero_grad()
+            if args.model == 'Transformer' or args.model == 'FNN' or args.model == 'FNNS':
+                optimizer.zero_grad()
+                output = model(data)
+                output = output.view(-1, ntokens)
+            else:
+                hidden = repackage_hidden(hidden)
+                output, hidden = model(data, hidden)
+            loss = criterion(output, targets)
+            loss.backward()
+            # optimizer.step()
+
+
+            # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
+            # if args.model != 'Transformer' and args.model != 'FNN':
+            torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip)
+            for p in model.parameters():
+                p.data.add_(p.grad, alpha=-lr)
+
+            total_loss += loss.item()
+
+            if batch % args.log_interval == 0 and batch > 0:
+                cur_loss = total_loss / args.log_interval
+                elapsed = time.time() - start_time
+                print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.3f} | ms/batch {:5.2f} | '
+                        'loss {:5.2f} | ppl {:8.2f}'.format(
+                    epoch, batch, len(train_data) // args.bptt, lr,
+                    elapsed * 1000 / args.log_interval, cur_loss, math.exp(cur_loss)))
+                total_loss = 0
+                start_time = time.time()
+            if args.dry_run:
+                break
+
+    else: #for FNN
+        for i in range(len(train_data)):
+            data = np.asarray(train_data[i])
+            
+            # print("thisthisthisthis", list(data))
+            data = torch.LongTensor(list(data))
+
+            targets = np.asarray(train_data[i][1:])
+            target_n = np.asarray(train_data[i+1][0])
+            targets = np.append(targets, target_n)
+            targets = torch.LongTensor(list(targets))
+
+            model.zero_grad()
             optimizer.zero_grad()
             output = model(data)
             output = output.view(-1, ntokens)
-        else:
-            hidden = repackage_hidden(hidden)
-            output, hidden = model(data, hidden)
-        loss = criterion(output, targets)
-        loss.backward()
-        optimizer.step()
 
+            loss = criterion(output, targets)
+            loss.backward()
+            optimizer.step()
 
-        # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
-        # if args.model != 'Transformer' and args.model != 'FNN':
-        torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip)
-        for p in model.parameters():
-            p.data.add_(p.grad, alpha=-lr)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip)
+            for p in model.parameters():
+                p.data.add_(p.grad, alpha=-lr)
 
-        total_loss += loss.item()
+            total_loss += loss.item()
 
-        if batch % args.log_interval == 0 and batch > 0:
-            cur_loss = total_loss / args.log_interval
-            elapsed = time.time() - start_time
-            print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.3f} | ms/batch {:5.2f} | '
-                    'loss {:5.2f} | ppl {:8.2f}'.format(
-                epoch, batch, len(train_data) // args.bptt, lr,
-                elapsed * 1000 / args.log_interval, cur_loss, math.exp(cur_loss)))
-            total_loss = 0
-            start_time = time.time()
-        if args.dry_run:
-            break
-    
+            if i % args.log_interval == 0 and i > 0:
+                cur_loss = total_loss / args.log_interval
+                elapsed = time.time() - start_time
+                print('| epoch {:3d} | seq number {:3d} | lr {:02.3f} | '
+                        'loss {:5.2f} | ppl {:8.2f}'.format(
+                    epoch, i, lr,
+                    cur_loss, 
+                    np.exp(cur_loss)))
+                total_loss = 0
+                start_time = time.time()
+            if args.dry_run:
+                break
 
 
 def export_onnx(path, batch_size, seq_len):
