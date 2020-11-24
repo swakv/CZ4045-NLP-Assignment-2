@@ -7,9 +7,18 @@ Download or Clone the repository before running any file
 
 # Question One
 Firstly, the main dependency, torch, for this question is installed. 
+
+For Windows
 ```bash
-   $ pip install torch
+   $ pip install torch===1.7.0 torchvision===0.8.1 torchaudio===0.7.0 -f https://download.pytorch.org/whl/torch_stable.html
 ```
+
+For MacOS
+```bash
+   $ pip install torch torchvision torchaudio
+```
+(MacOS Binaries dont support CUDA, install from source if CUDA is needed)
+
 The version of torch used in this project is Pytorch 1.7.0
 
 A Language model is built to predict the probability of the next word in the sequence based on the words
