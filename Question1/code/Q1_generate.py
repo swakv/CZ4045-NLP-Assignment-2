@@ -21,7 +21,7 @@ parser = argparse.ArgumentParser(description='PyTorch Wikitext-2 Language Model'
 # Model parameters.
 parser.add_argument('--data', type=str, default='./data/wikitext-2',
                     help='location of the data corpus')
-parser.add_argument('--checkpoint', type=str, default='../models/model_FNN.pt',
+parser.add_argument('--checkpoint', type=str, default='../models/modelFNNS.pt',
                     help='model checkpoint to use')
 parser.add_argument('--outf', type=str, default='../generated/generated.txt',
                     help='output file for generated text')
@@ -61,12 +61,44 @@ class FNNModel(nn.Module):
     def forward(self, input):
         embeds = self.embeddings(input)
         embeds = embeds.view(1,-1)
-        embeds = embeds.resize_((1400,200))
-        print(embeds.shape)
+        embeds = embeds.resize_((200,1400))
         out = self.linear(embeds)
         out = F.tanh(self.linear(embeds))
         log_probs = F.log_softmax(self.linear2(out))
         return log_probs
+
+class FNNModelSharing(nn.Module):
+
+    def __init__(self, ntoken, ninp, nhid):
+        super(FNNModelSharing, self).__init__()
+
+        self.embeddings = nn.Embedding(ntoken, ninp)
+       
+        self.linear = nn.Linear(7*ninp, nhid)
+        self.linear2 = nn.Linear(nhid, ntoken)
+       
+        self.linear2.weight.data = self.embeddings.weight.data
+
+        self.ntoken = ntoken
+        self.init_weights()
+        self.nhid = nhid
+
+    def init_weights(self):
+        initrange = 0.1
+        nn.init.uniform_(self.embeddings.weight, -initrange, initrange)
+        nn.init.zeros_(self.linear2.weight)
+        nn.init.uniform_(self.linear2.weight, -initrange, initrange)
+
+    def forward(self, input):
+        embeds = self.embeddings(input)
+        embeds = embeds.view(1,-1)
+        embeds = embeds.resize_((200,1400))
+        out = F.tanh(self.linear(embeds))
+       
+        out = self.linear2(out)
+        log_probs = F.log_softmax(out, dim=1)
+        return log_probs
+
 
 # Set the random seed manually for reproducibility.
 torch.manual_seed(args.seed)
