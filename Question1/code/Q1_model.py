@@ -161,12 +161,11 @@ class FNNModel(nn.Module):
         super(FNNModel, self).__init__()
 
         self.embeddings = nn.Embedding(ntoken, ninp)
-        
-        self.linear = nn.Linear(ninp, nhid)
-        # self.linear.weight.data = self.embeddings.weight.data.transpose(0,1)
-        self.linear2 = nn.Linear(nhid, ntoken) 
+       
+        self.linear = nn.Linear(7*ninp, nhid)
+        self.linear2 = nn.Linear(nhid, ntoken)
 
-        self.ntoken = ntoken 
+        self.ntoken = ntoken
         self.init_weights()
         self.nhid = nhid
 
@@ -178,12 +177,10 @@ class FNNModel(nn.Module):
 
     def forward(self, input):
         embeds = self.embeddings(input)
+        embeds = embeds.view(1,-1)
         out = F.tanh(self.linear(embeds))
-        out = self.linear2(out)
-        log_probs = F.log_softmax(out, dim=1)
+        log_probs = F.log_softmax(self.linear2(out))
         return log_probs
-
-
 
 
 class FNNModelSharing(nn.Module):
@@ -192,13 +189,13 @@ class FNNModelSharing(nn.Module):
         super(FNNModelSharing, self).__init__()
 
         self.embeddings = nn.Embedding(ntoken, ninp)
-        
-        self.linear = nn.Linear(ninp, nhid)
-        self.linear2 = nn.Linear(nhid, ntoken) 
-        
+       
+        self.linear = nn.Linear(7*ninp, nhid)
+        self.linear2 = nn.Linear(nhid, ntoken)
+       
         self.linear2.weight.data = self.embeddings.weight.data
 
-        self.ntoken = ntoken 
+        self.ntoken = ntoken
         self.init_weights()
         self.nhid = nhid
 
@@ -210,8 +207,9 @@ class FNNModelSharing(nn.Module):
 
     def forward(self, input):
         embeds = self.embeddings(input)
+        embeds = embeds.view(1,-1)
         out = F.tanh(self.linear(embeds))
-        
+       
         out = self.linear2(out)
         log_probs = F.log_softmax(out, dim=1)
         return log_probs

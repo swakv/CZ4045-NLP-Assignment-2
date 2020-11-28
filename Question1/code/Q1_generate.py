@@ -11,12 +11,17 @@ import torch
 
 import Q1_data
 
+import math
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
 parser = argparse.ArgumentParser(description='PyTorch Wikitext-2 Language Model')
 
 # Model parameters.
 parser.add_argument('--data', type=str, default='./data/wikitext-2',
                     help='location of the data corpus')
-parser.add_argument('--checkpoint', type=str, default='model FNN.pt',
+parser.add_argument('--checkpoint', type=str, default='../models/model_FNN.pt',
                     help='model checkpoint to use')
 parser.add_argument('--outf', type=str, default='../generated/generated.txt',
                     help='output file for generated text')
@@ -32,6 +37,37 @@ parser.add_argument('--log-interval', type=int, default=100,
                     help='reporting interval')
 args = parser.parse_args()
 
+
+
+class FNNModel(nn.Module):
+
+    def __init__(self, ntoken, ninp, nhid):
+        super(FNNModel, self).__init__()
+
+        self.embeddings = nn.Embedding(ntoken, ninp)
+        self.linear = nn.Linear(7*ninp, nhid)
+        self.linear2 = nn.Linear(nhid, ntoken)
+
+        self.ntoken = ntoken
+        self.init_weights()
+        self.nhid = nhid
+
+    def init_weights(self):
+        initrange = 0.1
+        nn.init.uniform_(self.embeddings.weight, -initrange, initrange)
+        nn.init.zeros_(self.linear2.weight)
+        nn.init.uniform_(self.linear2.weight, -initrange, initrange)
+
+    def forward(self, input):
+        embeds = self.embeddings(input)
+        embeds = embeds.view(1,-1)
+        embeds = embeds.resize_((1400,200))
+        print(embeds.shape)
+        out = self.linear(embeds)
+        out = F.tanh(self.linear(embeds))
+        log_probs = F.log_softmax(self.linear2(out))
+        return log_probs
+
 # Set the random seed manually for reproducibility.
 torch.manual_seed(args.seed)
 if torch.cuda.is_available():
@@ -39,13 +75,17 @@ if torch.cuda.is_available():
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
 device = torch.device("cuda" if args.cuda else "cpu")
+# print(device)
 
 if args.temperature < 1e-3:
     parser.error("--temperature has to be greater or equal 1e-3")
 
 with open(args.checkpoint, 'rb') as f:
-    model = torch.load(f).to(device)
+    model = torch.load(f, map_location='cpu').to(device)
+
+# print(model)
 model.eval()
+
 
 corpus = Q1_data.Corpus(args.data)
 ntokens = len(corpus.dictionary)
