@@ -1,8 +1,71 @@
-import math
+# Q1_data
+import os
+from io import open
 import torch
+
+# Q1_model
+import math
 import torch.nn as nn
 import torch.nn.functional as F
 
+#Q1_main
+# import argparse
+import time
+import torch.onnx
+import numpy as np
+from torch.autograd import Variable
+import multiprocessing
+from torch.utils.data import DataLoader
+
+
+# %% [code]
+class Dictionary(object):
+    def __init__(self):
+        self.word2idx = {}
+        self.idx2word = []
+
+    def add_word(self, word):
+        if word not in self.word2idx:
+            self.idx2word.append(word)
+            self.word2idx[word] = len(self.idx2word) - 1
+        return self.word2idx[word]
+
+    def __len__(self):
+        return len(self.idx2word)
+
+
+class Corpus(object):
+    def __init__(self):
+        self.dictionary = Dictionary()
+        self.train = self.tokenize('../input/nlpdata/wiki.train.tokens')
+        self.valid = self.tokenize('../input/nlpdata/wiki.valid.tokens')
+        self.test = self.tokenize( '../input/nlpdata/wiki.test.tokens')
+
+    def tokenize(self, path):
+        """Tokenizes a text file."""
+       
+        assert os.path.exists(path)
+        # Add words to the dictionary
+        with open(path, 'r', encoding="utf8") as f:
+            for line in f:
+                words = line.split() + ['<eos>']
+                for word in words:
+                    self.dictionary.add_word(word)
+
+        # Tokenize file content
+        with open(path, 'r', encoding="utf8") as f:
+            idss = []
+            for line in f:
+                words = line.split() + ['<eos>']
+                ids = []
+                for word in words:
+                    ids.append(self.dictionary.word2idx[word])
+                idss.append(torch.tensor(ids).type(torch.int64))
+            # print("idss",len(idss))
+            ids = torch.cat(idss)
+            # print("ids",len(ids))
+
+        return ids
 
 
 class RNNModel(nn.Module):
@@ -15,6 +78,7 @@ class RNNModel(nn.Module):
         self.encoder = nn.Embedding(ntoken, ninp)
         if rnn_type in ['LSTM', 'GRU']:
             self.rnn = getattr(nn, rnn_type)(ninp, nhid, nlayers, dropout=dropout)
+            # print(rnn_type)
         else:
             try:
                 nonlinearity = {'RNN_TANH': 'tanh', 'RNN_RELU': 'relu'}[rnn_type]
@@ -110,8 +174,8 @@ class PositionalEncoding(nn.Module):
 class TransformerModel(nn.Module):
     """Container module with an encoder, a recurrent or transformer module, and a decoder."""
 
-    def __init__(self, ntoken, ninp, nhead, nhid, nlayers, dropout=0.5):
-        super(TransformerModel, self).__init__()
+    def _init_(self, ntoken, ninp, nhead, nhid, nlayers, dropout=0.5):
+        super(TransformerModel, self)._init_()
         try:
             from torch.nn import TransformerEncoder, TransformerEncoderLayer
         except:
@@ -162,7 +226,7 @@ class FNNModel(nn.Module):
 
         self.embeddings = nn.Embedding(ntoken, ninp)
        
-        self.linear = nn.Linear(7*ninp, nhid)
+        self.linear = nn.Linear(7*ninp, nhid) 
         self.linear2 = nn.Linear(nhid, ntoken)
 
         self.ntoken = ntoken
@@ -179,9 +243,8 @@ class FNNModel(nn.Module):
         embeds = self.embeddings(input)
         embeds = embeds.view(1,-1)
         out = F.tanh(self.linear(embeds))
-        log_probs = F.log_softmax(self.linear2(out))
-        return log_probs
-
+        probs = F.log_softmax(self.linear2(out))
+        return probs
 
 class FNNModelSharing(nn.Module):
 
@@ -211,5 +274,5 @@ class FNNModelSharing(nn.Module):
         out = F.tanh(self.linear(embeds))
        
         out = self.linear2(out)
-        log_probs = F.log_softmax(out, dim=1)
-        return log_probs
+        probs = F.log_softmax(out, dim=1)
+        return probs

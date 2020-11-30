@@ -81,10 +81,24 @@ corpus = Q1_data.Corpus(args.data)
 # batch processing.
 
 
-def ngram(data, no):
-    ngrams_tup = torch.split(data,8)
-    return ngrams_tup
+ngram_here = torch.split(corpus.train, 1)
+ngram_here = [t.numpy() for t in ngram_here]
+ngram_here = ngram_here[:-1]
+ngram_here = torch.tensor(ngram_here)
+ngram_here = ngram_here.to(device)
 
+val_data = torch.split(corpus.valid, 1)
+val_data = [t.numpy() for t in val_data]
+val_data = val_data[:-1]
+val_data = torch.tensor(val_data)
+val_data = val_data.to(device)
+
+test_data = torch.split(corpus.test, 1)
+test_data = [t.numpy() for t in test_data]
+test_data = test_data[:-1]
+test_data = torch.tensor(test_data)
+test_data = test_data.to(device)
+print("reached")
 
 def batchify(data, bsz):
     # Work out how cleanly we can divide the dataset into bsz parts.
@@ -101,10 +115,6 @@ if args.model != 'FNN' and args.model != 'FNNS':
     train_data = batchify(corpus.train, args.batch_size)
     val_data = batchify(corpus.valid, eval_batch_size)
     test_data = batchify(corpus.test, eval_batch_size)
-else: 
-    train_data = ngram(corpus.train, 8)
-    val_data = ngram(corpus.valid, 8)
-    test_data = ngram(corpus.test, 8)
 
 ###############################################################################
 # Build the model
@@ -147,6 +157,8 @@ def repackage_hidden(h):
 # by the batchify function. The chunks are along dimension 0, corresponding
 # to the seq_len dimension in the LSTM.
 
+
+
 def get_batch(source, i):
     # print("i " ,i)
     seq_len = min(args.bptt, len(source) - 1 - i)
@@ -176,18 +188,16 @@ def evaluate(data_source):
                     output, hidden = model(data, hidden)
                     hidden = repackage_hidden(hidden)
                 total_loss += len(data) * criterion(output, targets).item()
-        else:
-            for i in range(len(data_source)):
-                data = np.asarray(data_source[i])
-                data = torch.LongTensor(list(data))
-                targets = np.asarray(data_source[i][1:])
-                target_n = np.asarray(data_source[i+1][0])
-                targets = np.append(targets, target_n)
-                targets = torch.LongTensor(list(targets))
-
+        
+        else: #for FNN
+            for i in range(int(len(data_source))-7):
+                data = data_source[i:i+7]
+                targets = data_source[i+7]
+                targets = [targets]
+                targets = torch.tensor(targets)
+                targets = targets.to(device)
                 output = model(data)
-                output = output.view(-1, ntokens)
-                total_loss += len(data) * criterion(output, targets).item()
+                total_loss +=  criterion(output, targets).item()
 
     return total_loss / (len(data_source) - 1)
 
@@ -242,42 +252,41 @@ def train():
                 break
 
     else: #for FNN
-        for i in range(len(train_data)):
-            data = np.asarray(train_data[i])
-            data = torch.LongTensor(list(data))
-
-            targets = np.asarray(train_data[i][1:])
-            target_n = np.asarray(train_data[i+1][0])
-            targets = np.append(targets, target_n)
-            targets = torch.LongTensor(list(targets))
-
+        
+        count = 0
+        for i in range(int(len(ngram_here))-7):
+            data = ngram_here[i:i+7]
+            targets = ngram_here[i+7]
+            targets = [targets]
+            targets = torch.tensor(targets)
+            targets = targets.to(device)
+            # print("DATA", data)
+            # print("TARGETS", targets)
+                
             model.zero_grad()
-            optimizer.zero_grad()
+            model.to(device)
+            optimizer.zero_grad()            
             output = model(data)
-            output = output.view(-1, ntokens)
-
+            
+            
             loss = criterion(output, targets)
+            
             loss.backward()
             optimizer.step()
-
-            torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip)
-            for p in model.parameters():
-                p.data.add_(p.grad, alpha=-lr)
-
             total_loss += loss.item()
 
-            if i % args.log_interval == 0 and i > 0:
-                cur_loss = total_loss / args.log_interval
+            if count % log_interval == 0 and count > 0:
+                cur_loss = total_loss / log_interval
                 elapsed = time.time() - start_time
-                print('| epoch {:3d} | seq number {:3d} | lr {:02.3f} | '
+                print('| epoch {:3d} | seq number {:3d} | lr {:02.4f} | '
                         'loss {:5.2f} | ppl {:8.2f}'.format(
-                    epoch, i, lr,
-                    cur_loss, 
+                    epoch, count, lr,
+                    cur_loss,
                     np.exp(cur_loss)))
                 total_loss = 0
                 start_time = time.time()
-            if args.dry_run:
-                break
+
+            count+=1
 
 
 def export_onnx(path, batch_size, seq_len):

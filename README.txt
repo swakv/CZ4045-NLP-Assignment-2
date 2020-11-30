@@ -30,14 +30,14 @@ At the end of 6 epochs, the test perplexity was noted to be 141.13 while our tes
 We then built a FNN network which does the same function and also processed inputs as ngrams (N = 8). The optimizer used was Adam with 
 a learning rate of 0.0003
 
-The model can be run my specifying the parameters as shown below - 
-python code/Q1_main.py --model FNN --epochs 6 --lr 0.0003
+The model can be run my using the ipynb notebook - 
+NLP_Q1_FNN.ipynb
 
 At the end of 6 epochs, the test perplexity was noted to be 3696.64 while our test loss was 8.22 
 
 Similarly, a model is trained by sharing weights between the embedding layer and the output layer. This model can be run by
-specifying parameters as shown below - 
-python code/Q1_main.py --model FNNS --epochs 6 --lr 0.0003
+using another ipynb - 
+NLP_Q1_FNNS.ipynb
 
 At the end of 6 epochs, the test perplexity was noted to be 3743.54 while our test loss was 8.23
 
